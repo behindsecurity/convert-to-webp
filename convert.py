@@ -1,71 +1,99 @@
 #!/usr/bin/env python3
 
-import os
-import sys
 import argparse
+import sys
+import os
 from PIL import Image
 
-def convert_to_webp(filename:str, dimensions: tuple, quality:int, prefix:str) -> str:
-    """Uses PIL library to convert image stream to webp, saving locally with specified quality and filename prefix.
+
+def add_watermark(image: Image.Image, watermark_image_path: str, transparency: int) -> Image.Image:
+    """Applies a resized watermark to the center of an image with adjustable transparency.
 
     Arguments:
-        filename:str - Name of the file to save.
-        dimensions:tuple - A tuple containing dimensions to resize the image to. Example: (500, 333)
-        quality:int - Image quality for the output file.
-        prefix:str - Prefix to add to the file name when saved.
+        image (Image.Image): The PIL Image object of the base image.
+        watermark_image_path (str): The path to the watermark image.
+        transparency (int): The transparency level of the watermark (0 to 255; 0 is fully transparent, 255 is fully opaque).
     
-    Return:str 
-        Newly saved file's filename
+    Returns:
+        Image.Image: The watermarked image.
     """
-    image = Image.open(filename)
-    image.thumbnail(dimensions)
-    image = image.convert("RGB")
+    watermark = Image.open(watermark_image_path)
+    base_width, base_height = image.size
 
+    # Convert the watermark image to RGBA if not already
+    if watermark.mode != 'RGBA':
+        watermark = watermark.convert("RGBA")
+
+    # Resize watermark if it's larger than the base image
+    watermark_width, watermark_height = watermark.size
+    if watermark_width > base_width or watermark_height > base_height:
+        scale = min(base_width / watermark_width, base_height / watermark_height)
+        new_size = (int(watermark_width * scale), int(watermark_height * scale))
+        watermark = watermark.resize(new_size, Image.ANTIALIAS)
+
+    # Adjust the watermark transparency
+    alpha = watermark.split()[3]  # Get the alpha channel
+    alpha = alpha.point(lambda p: p * transparency / 255)
+    watermark.putalpha(alpha)
+
+    # Calculate the position for the watermark: centered
+    watermark_width, watermark_height = watermark.size
+    position = ((base_width - watermark_width) // 2, (base_height - watermark_height) // 2)
+
+    # Create a transparent layer the size of the base image
+    transparent = Image.new('RGBA', image.size, (0,0,0,0))
+    # Paste the watermark in the center
+    transparent.paste(watermark, position, watermark)
+    # Blend with the base image
+    watermarked_image = Image.alpha_composite(image.convert('RGBA'), transparent)
+    return watermarked_image.convert('RGB')
+
+
+def convert_to_webp(base_image: Image.Image, filename: str, dimensions: tuple, quality: int, prefix: str) -> str:
+    """Converts and resizes a PIL Image object to webp, saving locally with specified quality and filename prefix.
+
+    Arguments:
+        base_image (Image.Image): The PIL Image object to convert.
+        filename (str): Name of the original file to derive the new filename.
+        dimensions (tuple): A tuple containing dimensions to resize the image to. Example: (500, 333)
+        quality (int): Image quality for the output file.
+        prefix (str): Prefix to add to the file name when saved.
+    
+    Returns:
+        str: Newly saved file's filename
+    """
+    base_image.thumbnail(dimensions)
+    
     # Splitting filename to remove extension and add prefix
     base_filename = os.path.splitext(os.path.basename(filename))[0]
     new_filename = f"./webp/{prefix}{base_filename}.webp"
-    image.save(new_filename, format="webp", optimize=True, quality=quality, method=6)
+    base_image.save(new_filename, format="webp", optimize=True, quality=quality, method=6)
+    
     return new_filename
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Convert images to WEBP format with specified quality and filename prefix.')
+    parser = argparse.ArgumentParser(description='Convert images to WEBP format with watermarking, specified quality and filename prefix.')
     parser.add_argument('files', nargs='+', help='Files to convert')
-    parser.add_argument('--quality', type=int, default=70, help='Quality of the output WEBP images')
+    parser.add_argument('--quality', type=int, default=85, help='Quality of the output WEBP images')
     parser.add_argument('--prefix', type=str, default='', help='Prefix to add to the file name')
     parser.add_argument('--width', type=int, default=1024, help='Width to resize the image to')
     parser.add_argument('--height', type=int, default=1024, help='Height to resize the image to')
+    parser.add_argument('--watermark', type=str, required=True, help='Path to the watermark image')
+    parser.add_argument('--transparency', type=int, default=128, help='Transparency of the watermark (0 to 255)')
     args = parser.parse_args()
 
     if not os.path.isdir('./webp'):
         os.mkdir('./webp')
 
-    original_files = []
-    new_filenames = []
-
     for file in args.files:
         if file.endswith('.png') or file.endswith('.jpg'):
-            original_files.append( (file, os.path.getsize(f'./{file}')) )
-            new_filename = convert_to_webp(file, (args.width, args.height), args.quality, args.prefix)
-            new_filenames.append(new_filename)
+            original_image = Image.open(file)
+            watermarked_image = add_watermark(original_image, args.watermark, args.transparency)
+            new_filename = convert_to_webp(watermarked_image, file, (args.width, args.height), args.quality, args.prefix)
+            print(f"Processed {file} -> {new_filename}")
 
-    if not original_files:
-        print('[~] No valid image files specified. Please provide .png or .jpg files.')
-        sys.exit()
-
-    old_size = sum(size for _, size in original_files)
-    new_sizes = [os.path.getsize(f'./{filename}') for filename in new_filenames]
-    new_size = sum(new_sizes)
-
-    difference_percentage = round((abs(new_size - old_size) / old_size) * 100.0, 2) if old_size > 0 else 0
-    message = 'choosing quality over performance' if args.quality >= 60 else 'choosing performance over quality'
-    file_quantity = len(original_files)
-
-    print(f"""
-        [{file_quantity} File{'s' if file_quantity > 1 else ''}] {', '.join(os.path.basename(filename) for filename, _ in original_files)}
-        [Quality] {args.quality}% ({message})
-        [Difference] {difference_percentage}% (higher is better - {new_size} bytes over {old_size} bytes)
-        """)
+    print('Conversion complete.')
 
 if __name__ == '__main__':
     main()
