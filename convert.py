@@ -21,12 +21,12 @@ def add_watermark(image: Image.Image, watermark_image_path: str, transparency: i
     base_width, base_height = image.size
 
     # Convert the watermark image to RGBA if not already
-    if watermark.mode != 'RGBA':
+    if (watermark.mode != 'RGBA'):
         watermark = watermark.convert("RGBA")
 
     # Resize watermark if it's larger than the base image
     watermark_width, watermark_height = watermark.size
-    if watermark_width > base_width or watermark_height > base_height:
+    if (watermark_width > base_width or watermark_height > base_height):
         scale = min(base_width / watermark_width, base_height / watermark_height)
         new_size = (int(watermark_width * scale), int(watermark_height * scale))
         watermark = watermark.resize(new_size, Image.ANTIALIAS)
@@ -41,7 +41,7 @@ def add_watermark(image: Image.Image, watermark_image_path: str, transparency: i
     position = ((base_width - watermark_width) // 2, (base_height - watermark_height) // 2)
 
     # Create a transparent layer the size of the base image
-    transparent = Image.new('RGBA', image.size, (0,0,0,0))
+    transparent = Image.new('RGBA', image.size, (0, 0, 0, 0))
     # Paste the watermark in the center
     transparent.paste(watermark, position, watermark)
     # Blend with the base image
@@ -73,13 +73,13 @@ def convert_to_webp(base_image: Image.Image, filename: str, dimensions: tuple, q
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Convert images to WEBP format with watermarking, specified quality and filename prefix.')
+    parser = argparse.ArgumentParser(description='Convert images to WEBP format with optional watermarking, specified quality and filename prefix.')
     parser.add_argument('files', nargs='+', help='Files to convert')
     parser.add_argument('--quality', type=int, default=85, help='Quality of the output WEBP images')
     parser.add_argument('--prefix', type=str, default='', help='Prefix to add to the file name')
     parser.add_argument('--width', type=int, default=1024, help='Width to resize the image to')
     parser.add_argument('--height', type=int, default=1024, help='Height to resize the image to')
-    parser.add_argument('--watermark', type=str, required=True, help='Path to the watermark image')
+    parser.add_argument('--watermark', type=str, help='Path to the watermark image (optional)')
     parser.add_argument('--transparency', type=int, default=128, help='Transparency of the watermark (0 to 255)')
     args = parser.parse_args()
 
@@ -89,8 +89,11 @@ def main():
     for file in args.files:
         if file.endswith('.png') or file.endswith('.jpg'):
             original_image = Image.open(file)
-            watermarked_image = add_watermark(original_image, args.watermark, args.transparency)
-            new_filename = convert_to_webp(watermarked_image, file, (args.width, args.height), args.quality, args.prefix)
+            if args.watermark:
+                processed_image = add_watermark(original_image, args.watermark, args.transparency)
+            else:
+                processed_image = original_image
+            new_filename = convert_to_webp(processed_image, file, (args.width, args.height), args.quality, args.prefix)
             print(f"Processed {file} -> {new_filename}")
 
     print('Conversion complete.')
