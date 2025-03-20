@@ -29,7 +29,7 @@ def add_watermark(image: Image.Image, watermark_image_path: str, transparency: i
     if (watermark_width > base_width or watermark_height > base_height):
         scale = min(base_width / watermark_width, base_height / watermark_height)
         new_size = (int(watermark_width * scale), int(watermark_height * scale))
-        watermark = watermark.resize(new_size, Image.ANTIALIAS)
+        watermark = watermark.resize(new_size, Image.LANCZOS)
 
     # Adjust the watermark transparency
     alpha = watermark.split()[3]  # Get the alpha channel
