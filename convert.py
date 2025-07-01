@@ -1,102 +1,109 @@
 #!/usr/bin/env python3
 
 import argparse
-import sys
 import os
 from PIL import Image
 
-
 def add_watermark(image: Image.Image, watermark_image_path: str, transparency: int) -> Image.Image:
-    """Applies a resized watermark to the center of an image with adjustable transparency.
-
-    Arguments:
-        image (Image.Image): The PIL Image object of the base image.
-        watermark_image_path (str): The path to the watermark image.
-        transparency (int): The transparency level of the watermark (0 to 255; 0 is fully transparent, 255 is fully opaque).
-    
-    Returns:
-        Image.Image: The watermarked image.
-    """
+    """Applies a resized watermark to the center of an image with adjustable transparency."""
     watermark = Image.open(watermark_image_path)
     base_width, base_height = image.size
 
-    # Convert the watermark image to RGBA if not already
-    if (watermark.mode != 'RGBA'):
+    if watermark.mode != 'RGBA':
         watermark = watermark.convert("RGBA")
 
-    # Resize watermark if it's larger than the base image
-    watermark_width, watermark_height = watermark.size
-    if (watermark_width > base_width or watermark_height > base_height):
-        scale = min(base_width / watermark_width, base_height / watermark_height)
-        new_size = (int(watermark_width * scale), int(watermark_height * scale))
-        watermark = watermark.resize(new_size, Image.LANCZOS)
+    w_w, w_h = watermark.size
+    if w_w > base_width or w_h > base_height:
+        scale = min(base_width / w_w, base_height / w_h)
+        watermark = watermark.resize((int(w_w * scale), int(w_h * scale)), Image.LANCZOS)
 
-    # Adjust the watermark transparency
-    alpha = watermark.split()[3]  # Get the alpha channel
-    alpha = alpha.point(lambda p: p * transparency / 255)
+    # adjust transparency
+    alpha = watermark.split()[3].point(lambda p: p * transparency / 255)
     watermark.putalpha(alpha)
 
-    # Calculate the position for the watermark: centered
-    watermark_width, watermark_height = watermark.size
-    position = ((base_width - watermark_width) // 2, (base_height - watermark_height) // 2)
+    # center position
+    wm_w, wm_h = watermark.size
+    position = ((base_width - wm_w) // 2, (base_height - wm_h) // 2)
 
-    # Create a transparent layer the size of the base image
-    transparent = Image.new('RGBA', image.size, (0, 0, 0, 0))
-    # Paste the watermark in the center
-    transparent.paste(watermark, position, watermark)
-    # Blend with the base image
-    watermarked_image = Image.alpha_composite(image.convert('RGBA'), transparent)
-    return watermarked_image.convert('RGB')
+    layer = Image.new('RGBA', image.size, (0, 0, 0, 0))
+    layer.paste(watermark, position, watermark)
+    composite = Image.alpha_composite(image.convert('RGBA'), layer)
+    return composite.convert('RGB')
 
 
-def convert_to_webp(base_image: Image.Image, filename: str, dimensions: tuple, quality: int, prefix: str) -> str:
-    """Converts and resizes a PIL Image object to webp, saving locally with specified quality and filename prefix.
+def convert_to_webp(base_image: Image.Image, filename: str, dimensions: tuple, quality: int, prefix: str):
+    """Converts/resizes to WebP, reports per-file savings, and returns sizes for overall tally."""
+    # 1) original size
+    orig_size = os.path.getsize(filename)
 
-    Arguments:
-        base_image (Image.Image): The PIL Image object to convert.
-        filename (str): Name of the original file to derive the new filename.
-        dimensions (tuple): A tuple containing dimensions to resize the image to. Example: (500, 333)
-        quality (int): Image quality for the output file.
-        prefix (str): Prefix to add to the file name when saved.
-    
-    Returns:
-        str: Newly saved file's filename
-    """
+    # 2) resize & save
     base_image.thumbnail(dimensions)
-    
-    # Splitting filename to remove extension and add prefix
-    base_filename = os.path.splitext(os.path.basename(filename))[0]
-    new_filename = f"./webp/{prefix}{base_filename}.webp"
-    base_image.save(new_filename, format="webp", optimize=True, quality=quality, method=6)
-    
-    return new_filename
+    base_name = os.path.splitext(os.path.basename(filename))[0]
+    out_path = f"./webp/{prefix}{base_name}.webp"
+    base_image.save(out_path, format="webp", optimize=True, quality=quality, method=6)
+
+    # 3) new size
+    new_size = os.path.getsize(out_path)
+
+    # 4) compute & print per-file savings
+    saved = orig_size - new_size
+    saved_mb = saved / (1024 * 1024)
+    pct = (saved / orig_size) * 100 if orig_size > 0 else 0
+    print(f"Processed {filename} -> {out_path}")
+    print(f" → Saved {saved} bytes ({saved_mb:.2f} MB), {pct:.1f}% smaller")
+
+    return out_path, orig_size, new_size
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Convert images to WEBP format with optional watermarking, specified quality and filename prefix.')
-    parser.add_argument('files', nargs='+', help='Files to convert')
-    parser.add_argument('--quality', type=int, default=85, help='Quality of the output WEBP images')
-    parser.add_argument('--prefix', type=str, default='', help='Prefix to add to the file name')
-    parser.add_argument('--width', type=int, default=1024, help='Width to resize the image to')
-    parser.add_argument('--height', type=int, default=1024, help='Height to resize the image to')
-    parser.add_argument('--watermark', type=str, help='Path to the watermark image (optional)')
-    parser.add_argument('--transparency', type=int, default=128, help='Transparency of the watermark (0 to 255)')
+    parser = argparse.ArgumentParser(
+        description='Convert images to WebP with optional watermarking, quality, prefix, and report total savings.'
+    )
+    parser.add_argument('files', nargs='+', help='Files to convert (PNG, JPG, JPEG)')
+    parser.add_argument('--quality', type=int, default=85, help='Output WebP quality (0–100)')
+    parser.add_argument('--prefix', type=str, default='', help='Filename prefix for output files')
+    parser.add_argument('--width', type=int, default=1024, help='Max width to resize to')
+    parser.add_argument('--height', type=int, default=1024, help='Max height to resize to')
+    parser.add_argument('--watermark', type=str, help='Path to watermark image')
+    parser.add_argument('--transparency', type=int, default=100, help='Watermark transparency (0–255)')
     args = parser.parse_args()
 
-    if not os.path.isdir('./webp'):
-        os.mkdir('./webp')
+    os.makedirs('./webp', exist_ok=True)
+
+    total_orig = 0
+    total_new = 0
+    processed_count = 0
 
     for file in args.files:
-        if file.endswith('.png') or file.endswith('.jpg'):
-            original_image = Image.open(file)
-            if args.watermark:
-                processed_image = add_watermark(original_image, args.watermark, args.transparency)
-            else:
-                processed_image = original_image
-            new_filename = convert_to_webp(processed_image, file, (args.width, args.height), args.quality, args.prefix)
-            print(f"Processed {file} -> {new_filename}")
+        if not file.lower().endswith(('.png', '.jpg', '.jpeg')):
+            print(f"Skipping {file}: unsupported extension")
+            continue
 
-    print('Conversion complete.')
+        img = Image.open(file)
+        if args.watermark:
+            img = add_watermark(img, args.watermark, args.transparency)
+
+        _, orig_size, new_size = convert_to_webp(
+            img,
+            file,
+            (args.width, args.height),
+            args.quality,
+            args.prefix
+        )
+
+        total_orig += orig_size
+        total_new += new_size
+        processed_count += 1
+
+    if processed_count > 0:
+        total_saved = total_orig - total_new
+        total_saved_mb = total_saved / (1024 * 1024)
+        total_pct = (total_saved / total_orig) * 100 if total_orig > 0 else 0
+        print("\n=== Overall Savings ===")
+        print(f"Processed {processed_count} images")
+        print(f"Total saved: {total_saved} bytes ({total_saved_mb:.2f} MB), {total_pct:.1f}% reduction overall")
+    else:
+        print("No images were processed.")
 
 if __name__ == '__main__':
     main()
