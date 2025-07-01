@@ -1,43 +1,147 @@
-# Image Watermarking and WEBP Conversion Tool
+# convert-to-webp
 
-This Python script provides a tool for adding watermarks to images and converting them to the WEBP format. It allows you to specify the transparency of the watermark, resize the watermark to fit the image, and adjust the dimensions and quality of the resulting WEBP images.
+A command-line tool to batch-convert images to WebP format with optional image and/or text watermarks.  
+It automatically resizes, optimizes for quality, reports per-file and total byte/MB savings, and supports customization of fonts, colors, sizes and transparency.
+
+---
 
 ## Features
 
-- **Watermarking**: Adds a watermark to the center of an image, resizing the watermark to ensure it fits within the image while maintaining its aspect ratio.
-- **WEBP Conversion**: Converts images to the WEBP format, allowing for specification of image dimensions and quality.
-- **Batch Processing**: Processes multiple images in one go, applying watermarks and converting them to WEBP format.
+- **Convert** JPEG/PNG to WebP with thumbnail resizing  
+- **Optimize** output with adjustable quality (0–100) and `optimize`/`method=6` flags  
+- **Image watermark**: supply a PNG (with alpha) and set transparency  
+- **Text watermark**: customize text, TTF font, font size, font color, and transparency  
+- **Reporting**: shows bytes and MB saved per file and overall, plus percent reduction  
+- **Batch** processing: handle multiple files in one command  
 
-## Prerequisites
+---
 
-Before you can run this script, you need to have Python installed on your system along with the PIL library. If you do not have the PIL library installed, you can install it using pip:
+## Requirements
+
+- Python 3.6+  
+- [Pillow](https://pypi.org/project/Pillow/)  
 
 ```bash
-pip3 install Pillow
+pip install --upgrade Pillow
+````
+
+---
+
+## Installation
+
+1. Clone this repository
+
+```bash
+git clone https://github.com/behindsecurity/convert-to-webp.git
+cd convert-to-webp
 ```
+2. Make the script executable (or invoke via `python3`)
+
+```bash
+chmod +x convert-to-webp.py
+```
+
+---
 
 ## Usage
 
-To use this script, you need to provide the paths to the images you want to process, as well as the path to the watermark image. You can also specify the quality, the dimensions for resizing, and the prefix for the output filenames.
-
-### Command-Line Arguments
-
-- `files`: List of image files to process. Each file should be a `.png` or `.jpg`.
-- `--quality`: Quality of the output WEBP images (default is 85).
-- `--prefix`: Prefix to add to the filename when saved.
-- `--width`: Width to resize the image to (default is 1024).
-- `--height`: Height to resize the image to (default is 1024).
-- `--watermark`: Path to the watermark image (required).
-- `--transparency`: Transparency of the watermark (0 to 255, where 0 is fully transparent and 255 is fully opaque; default is 128).
-
-### Example Command
-
 ```bash
-python3 convert.py image1.jpg image2.png --watermark /path/to/watermark.png --transparency 125 --quality 70 --width 800 --height 600 --prefix converted_
+./convert-to-webp.py [options] <file1> <file2> ... <fileN>
 ```
 
-This command will process `image1.jpg` and `image2.png`, add the watermark from `/path/to/watermark.png`, and save the converted WEBP images with a quality of 90 and dimensions of 800x600 pixels. The output files will be prefixed with `converted_`.
+All converted files are written to the `./webp/` directory (created automatically).
 
-## Output
+### Common options
 
-The script will create a directory named `./webp` where it will save all the converted images. The names of the output files will be derived from the original filenames, prefixed as specified, and saved in WEBP format.
+| Option | Type| Default| Description |
+| --------------------- | ------ | --------- | ----------------------------------------------------------- |
+| `--quality`  | int | 85  | WebP quality (0=lowest…100=highest) |
+| `--prefix`| string | `''`| Prefix for output filenames|
+| `--width` | int | 1024| Max width (px) for thumbnail  |
+| `--height`| int | 1024| Max height (px) for thumbnail |
+| `--watermark`| path| —| Path to image watermark (PNG with transparency recommended) |
+| `--transparency`| int | 100 | Watermark image transparency (0=hidden…255=opaque) |
+| `--text`  | string | —| Text to render as watermark|
+| `--font-path`| path| —| Path to `.ttf` font file (falls back to default PIL font)|
+| `--font-size`| int | 36  | Font size for text watermark  |
+| `--font-color`  | string | `#FFFFFF` | Font color, either hex (`#rrggbb`) or `r,g,b`|
+| `--text-transparency` | int | 100 | Text watermark transparency (0=hidden…255=opaque)  |
+
+Run `./convert-to-webp.py --help` for full usage details.
+
+---
+
+## Examples
+
+#### Basic conversion
+
+```bash
+./convert-to-webp.py photo1.jpg photo2.png
+```
+
+#### Set quality and resize dimensions
+
+```bash
+./convert-to-webp.py --quality 75 --width 800 --height 600 img/*.jpg
+```
+
+#### Add an image watermark
+
+```bash
+./convert-to-webp.py --watermark logo.png --transparency 128 pictures/*.png
+```
+
+#### Add a text watermark
+
+```bash
+./convert-to-webp.py \
+  --text "© MyCompany" \
+  --font-path /usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf \
+  --font-size 48 \
+  --font-color "#FF0000" \
+  --text-transparency 200 \
+  assets/*.jpg
+```
+
+#### Combined image + text watermark with output prefix
+
+```bash
+./convert-to-webp.py \
+  --prefix "webp_" \
+  --watermark logo.png --transparency 80 \
+  --text "behindsecurity.com" \
+  --font-size 30 \
+  --font-color 255,255,0 \
+  --text-transparency 150 \
+  photos/*
+```
+
+After running, you’ll see output like:
+
+```
+Processed photo1.jpg -> ./webp/webp_photo1.webp
+ → Saved 1,024,512 bytes (0.98 MB), 45.3% smaller
+Processed photo2.png -> ./webp/webp_photo2.webp
+ → Saved786,432 bytes (0.75 MB), 38.1% smaller
+
+=== Overall Savings ===
+Processed 2 images
+Total saved: 1,810,944 bytes (1.73 MB), 41.7% smaller overall
+```
+
+---
+
+## Contributing
+
+1. Fork the repo
+2. Create a feature branch (`git checkout -b feature-name`)
+3. Commit your changes (`git commit -m "Add feature"`)
+4. Push to your branch (`git push origin feature-name`)
+5. Open a Pull Request
+
+---
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).
+
